@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
 import { createGqlResponseSchema, gqlResponseSchema } from './schemas.js';
-import { graphql, buildSchema, GraphQLSchema, GraphQLObjectType } from 'graphql';
+import { graphql, buildSchema, GraphQLSchema, GraphQLObjectType, parse, validate } from 'graphql';
+import depthLimit from 'graphql-depth-limit';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
@@ -163,6 +164,13 @@ const plugin: FastifyPluginAsync = async (fastify) => {
     async handler(req) {
       const { query, variables } = (req.body as { query: string; variables?: Record<string, unknown> });
       const context: GqlContext = { prisma: fastify.prisma };
+
+      const documentAST = parse(query);
+      const validationErrors = validate(schema, documentAST, [depthLimit(5)]);
+
+      if (validationErrors.length > 0) {
+        return { errors: validationErrors };
+      }
 
       const result = await graphql({
         schema,
